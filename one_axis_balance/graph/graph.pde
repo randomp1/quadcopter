@@ -43,128 +43,6 @@ import java.util.concurrent.*;
 // ===							CLASSES						 	===
 // ================================================================
 
-class pair
-{
-	double xVar;
-	double yVar;
-
-	//Constructors
-	pair(double newX,double newY) { xVar = newX; yVar = newY; }
-	
-	//Setter and getter methods
-	void setVarX(double newX) { xVar = newX; }
-	void setVarY(double newY) { yVar = newY; }
-	void setPair(double newX,double newY) {xVar = newX; yVar = newY; }
-	
-	double getVarX() { return xVar; }
-	double getVarY() { return yVar; }
-}
-
-class dataPacket
-{
-	//Data members
-	long time;
-	float [] ypr = new float[3];
-	float [] pid = new float[3];
-	float [] motorValues = new float[4];
-	
-	//Constructors
-	dataPacket()
-	{
-		time=0;
-		ypr[0]=0;
-		ypr[1]=0;
-		ypr[2]=0;
-		pid[0] = 0;
-		pid[1] = 0;
-		pid[2] = 0;
-		motorValues[0] = 0;
-		motorValues[1] = 0;
-		motorValues[2] = 0;
-		motorValues[3] = 0;
-	}
-	
-	dataPacket(long timeInit, float yaw, float pitch, float roll, float p, float i, float d, float MV1, float MV2, float MV3, float MV4)
-	{
-		time = timeInit;
-		ypr[0] = yaw;
-		ypr[1] = pitch;
-		ypr[2] = roll;
-		pid[0] = p;
-		pid[1] = i;
-		pid[2] = d;
-		motorValues[0] = MV1;
-		motorValues[1] = MV2;
-		motorValues[2] = MV3;
-		motorValues[3] = MV4;
-	}
-	
-	//Setter methods
-	void setTime(long timeNew) { time = timeNew; }
-	
-	void setYawPitchRoll(float yaw, float pitch, float roll)
-	{
-		ypr[0] = yaw;
-		ypr[1] = pitch;
-		ypr[2] = roll;
-	}
-	
-	void setYawPitchRoll(float [] yawPitchRoll)
-	{
-		if(yawPitchRoll.length < 3)
-		{
-			println("Error in setYawPitchRoll(float [] yawPitchRoll), array length less than three!");
-			System.exit(0);
-		}
-		
-		System.arraycopy(yawPitchRoll,0,ypr,0,3);
-	}
-	
-	//Getter methods
-	long getTime() { return time; }
-	float getYaw() { return ypr[0]; }
-	float getPitch() { return ypr[1]; }
-	float getRoll() { return ypr[2]; }
-	void getYawPitchRoll(float [] yawPitchRoll)
-	{
-		if(yawPitchRoll.length < 3)
-		{
-			println("Error in getYawPitchRoll(float [] yawPitchRoll), array length less than three!");
-			System.exit(0);
-		}
-		
-		System.arraycopy(ypr,0,yawPitchRoll,0,3);
-	}
-	float getYawPitchRoll(int valueToSelect)
-	{
-		if((valueToSelect >= 0) && (valueToSelect <= 2)) return ypr[valueToSelect];
-		else
-		{
-			println("Error in getYawPitchRoll(int valueToSelect), value outside allowable range!");
-			System.exit(0);
-			return 0.0;
-		}
-	}
-	void getMotorValues(float [] motorValues)
-	{
-		if(motorValues.length < 4)
-		{
-			println("Error in getMotorValues(float [] motorValues), array length less than 4");
-			System.exit(0);
-		}
-	}
-	float getMotorValues(int valueToSelect)
-	{
-		if((valueToSelect >= 0) && (valueToSelect <= 3)) return motorValues[valueToSelect];
-		else
-		{
-			println("Error in getMotorValues(int valueToSelect), value outside allowable range!");
-			System.exit(0);
-			return 0.0;
-		}
-	}
-}
-
 class plot
 {
 	//Scale and position of graph relative to window (set by user)
@@ -174,7 +52,7 @@ class plot
 	double ratioHPosToWindowWidth;
 	
 	//Maximum and minimum axis values (automatically calculated or set by user)
-	int autoScale;		//0 = manual, 1 = automatic
+	boolean autoScale;		//false = manual, true = automatic
 	double xScaleMax;
 	double xScaleMin;
 	double yScaleMax;
@@ -188,7 +66,7 @@ class plot
 	int numDataPoints;
 	pair [] dataToPlot;
 	
-	//Constructor
+	//Constructors
 	plot(int newNumDataPoints,double hScale,double vScale,double hPos,double vPos,int xNumLabels,int yNumLabels)
 	{
 		numDataPoints = newNumDataPoints;
@@ -198,7 +76,7 @@ class plot
 		ratioHPosToWindowWidth = hPos;
 		xAxisNumLabels = xNumLabels;
 		yAxisNumLabels = yNumLabels;
-		autoScale = 0;
+		autoScale = true;
 	}
 	
 	plot(int newNumDataPoints,double hScale,double vScale,double hPos,double vPos,int xNumLabels,int yNumLabels,double yScaleMinNew,double yScaleMaxNew)
@@ -210,7 +88,7 @@ class plot
 		ratioHPosToWindowWidth = hPos;
 		xAxisNumLabels = xNumLabels;
 		yAxisNumLabels = yNumLabels;
-		autoScale = 1;
+		autoScale = false;
 		yScaleMax = yScaleMaxNew;
 		yScaleMin = yScaleMinNew;
 	}
@@ -240,17 +118,16 @@ class plot
 			//Check if min and max values of x and y have changed
 			xScaleMin = dataToPlot[0].getVarX();
 			xScaleMax = dataToPlot[0].getVarX();
-			if(autoScale == 0) yScaleMin = dataToPlot[0].getVarY();
-			if(autoScale == 0) yScaleMax = dataToPlot[0].getVarY();
+			if(autoScale == true) yScaleMin = dataToPlot[0].getVarY();
+			if(autoScale == true) yScaleMax = dataToPlot[0].getVarY();
 	
 			//Run through array to find highest and lowest x and y values
 			for(int i=0; i<dataToPlot.length; i++)
 			{
-				//println("i: " + i);
 				if(dataToPlot[i].getVarX() > xScaleMax) xScaleMax = dataToPlot[i].getVarX();
 				else if(dataToPlot[i].getVarX() < xScaleMin) xScaleMin = dataToPlot[i].getVarX();
 		
-				if(autoScale == 0)
+				if(autoScale == true)
 				{
 					if(dataToPlot[i].getVarY() > yScaleMax) yScaleMax = dataToPlot[i].getVarY();
 					else if(dataToPlot[i].getVarY() < yScaleMin) yScaleMin = dataToPlot[i].getVarY();
@@ -267,7 +144,7 @@ class plot
 			{
 				xTextPos = xShift+scaledWidth/10.0+((double)i/(xAxisNumLabels-1.0)*(8.0*scaledWidth/10.0));
 				yTextPos = yShift+scaledHeight-scaledHeight/20.0;
-				text((float)(xScaleMax-i*(xScaleMax-xScaleMin)/(xAxisNumLabels-1)),(int) xTextPos,(int) yTextPos);
+				text((float)(xScaleMin+i*(xScaleMax-xScaleMin)/(xAxisNumLabels-1)),(int) xTextPos,(int) yTextPos);
 			}
 			
 			for(int i=0; i < yAxisNumLabels; i++)
@@ -280,6 +157,14 @@ class plot
 			//Plot data:
 			for(int i=0; i<(dataToPlot.length-1); i++)
 			{
+				//Check if graph scale allows data to be plotted (should only not be the case if manual scale is used)
+				if( ((dataToPlot[i].getVarX() > xScaleMax) || (dataToPlot[i].getVarX() < xScaleMin) || (dataToPlot[i].getVarY() > yScaleMax) || (dataToPlot[i].getVarY() < yScaleMin))
+				 || ((dataToPlot[i+1].getVarX() > xScaleMax) || (dataToPlot[i+1].getVarX() < xScaleMin) || (dataToPlot[i+1].getVarY() > yScaleMax) || (dataToPlot[i+1].getVarY() < yScaleMin)) )
+				{
+					if(autoScale == true) println("MinSX:" + xScaleMin + " MaxSX:" + xScaleMax + " MinSY:" + yScaleMin + " MaxSY:" + yScaleMax + " (" + dataToPlot[i].getVarX() + "," + dataToPlot[i].getVarY() + ")");
+					continue;
+				}
+				
 				//Define x and y coordinates of points between which to draw lines
 				int x1 = (int) (xShift+(dataToPlot[i].getVarX()-xScaleMin)/(xScaleMax-xScaleMin)*(4.0*scaledWidth/5.0) + scaledWidth/10.0);
 				int y1 = (int) (yShift+(yScaleMax-dataToPlot[i].getVarY())/(yScaleMax-yScaleMin)*(4.0*scaledHeight/5.0) + scaledHeight/10.0);
@@ -293,11 +178,14 @@ class plot
 	}
 }
 
+//Input stream parameters
+boolean useSerial;
 Serial port;						 // The serial port
 char[] packet = new char[47];	 	 // Packet
 int serialCount = 0;				 // current packet byte position
 int aligned = 0;
 int interval = 0;
+String sampleData [];
 
 //Graph parameters
 plot rollPlot;
@@ -361,30 +249,79 @@ void setup()
 	
 	if(Serial.list().length < 1)
 	{
-		println("No serial ports detected!\nTerminating now...");
-		System.exit(0);
+		println("No serial ports detected!\nUsing sample csv file.");
+		
+		//load strings from sample file and process them
+		sampleData = loadStrings("./sample_data.csv");
+		
+		for(int i=0; i<sampleData.length; i++)
+		{
+			String tempString [] = sampleData[i].split(",");
+			if(tempString.length < 11)
+			{
+				println("Error! tempString too short!");
+				System.exit(0);
+			}
+			
+			//Create new dataPacket to store results in a nice format
+			newDataPacket = new dataPacket((new Float(tempString[0])).longValue(),
+											new Float(tempString[1]),
+											new Float(tempString[2]),
+											new Float(tempString[3]),
+											new Float(tempString[4]),
+											new Float(tempString[5]),
+											new Float(tempString[6]),
+											new Float(tempString[7]),
+											new Float(tempString[8]),
+											new Float(tempString[9]),
+											new Float(tempString[10]));
+			
+			//Using new data update graph coordinate lists
+			rollCoordList.push(new pair((double)newDataPacket.getTime(),(double)newDataPacket.getRoll()));
+			if(rollCoordList.size() > rollPlot.getNumDataPoints()) rollCoordList.removeLast();
+			
+			rollPlot.setDataToPlot(rollCoordList.toArray(new pair[rollCoordList.size()]));
+			
+			MV1CoordList.push(new pair((double)newDataPacket.getTime(),(double)newDataPacket.getMotorValues(0)));
+			if(MV1CoordList.size() > MV1Plot.getNumDataPoints()) MV1CoordList.removeLast();
+			
+			MV1Plot.setDataToPlot(MV1CoordList.toArray(new pair[MV1CoordList.size()]));
+			
+			MV2CoordList.push(new pair((double)newDataPacket.getTime(),(double)newDataPacket.getMotorValues(1)));
+			if(MV2CoordList.size() > MV2Plot.getNumDataPoints()) MV2CoordList.removeLast();
+			
+			MV2Plot.setDataToPlot(MV2CoordList.toArray(new pair[MV2CoordList.size()]));
+		}
+		
+		//Indicate that serial input is not being used		
+		useSerial=false;
 	}
-
-	// get the first available port (use EITHER this OR the specific port code below)
-	String portName = Serial.list()[0];
+	else
+	{
+		// get the first available port (use EITHER this OR the specific port code below)
+		String portName = Serial.list()[0];
 	
-	// get a specific serial port (use EITHER this OR the first-available code above)
-	//String portName = "COM4";
+		// get a specific serial port (use EITHER this OR the first-available code above)
+		//String portName = "COM4";
 	
-	// open the serial port
-	port = new Serial(this, portName, 115200);
+		// open the serial port
+		port = new Serial(this, portName, 115200);
+		
+		//Indicate that serial input is being used
+		useSerial=true;
 	
-	// send single character to trigger DMP init/start
-	// (expected by MPU6050_DMP6 example Arduino sketch)
-	delay(1000);
-	port.write('r');
-	delay(2000);
-	port.write("on");
+		// send single character to trigger DMP init/start
+		// (expected by MPU6050_DMP6 example Arduino sketch)
+		delay(1000);
+		port.write('r');
+		delay(2000);
+		port.write("on");
+	}
 }
 
 void draw()
 {
-	if(millis() - interval > 1000)
+	if((millis() - interval > 1000) && (useSerial == true))
 	{
 		port.write('r');
 		interval = millis();
@@ -392,6 +329,8 @@ void draw()
 	
 	// black background
 	background(255,255,255);
+	
+	text("Framerate: " + frameRate,10,15);
 	
 	height = frame.getHeight()-30;
 	width = frame.getWidth()-10;
@@ -474,7 +413,7 @@ void serialEvent(Serial port)
 					tempMV2 = (tempMV2 | packet[35]) << 8;
 					tempMV2 = (tempMV2 | packet[36]);
 					
-					//Add new data packet to end of deque and remove last element if there are more than numDataPoints data points stored
+					//Create new dataPacket to store results in a nice format
 					newDataPacket = new dataPacket(tempInt,Float.intBitsToFloat(tempYaw),Float.intBitsToFloat(tempPitch),Float.intBitsToFloat(tempRoll),0,0,0,Float.intBitsToFloat(tempMV1),Float.intBitsToFloat(tempMV2),0,0);
 					
 					//Using new data update graph coordinate lists

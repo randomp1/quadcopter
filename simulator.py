@@ -1,6 +1,11 @@
 # Quadcopter simulator
 
 #*****************************************************************************#
+# Imports
+#*****************************************************************************#
+import math
+
+#*****************************************************************************#
 # Classes
 #*****************************************************************************#
 
@@ -24,19 +29,30 @@ simulationLength = 20.0
 
 # Sensor characteristics
 lastSensorReading = 0.0
-sensorUpdatePeriod = 0.05
+sensorUpdatePeriod = 0.1
+sensorOrientation = [0.0,0.0,0.0]
+previousSensorOrientation = [0.0,0.0,0.0]
 
 # Quadcopter physical characteristics
-quadcopterMass = 1;
-quadcopterArmLength = 0.3;
+# TODO: Measure these precisely!
+quadcopterMass = 1
+quadcopterArmLength = 0.3
+quadcopterMomentOfInertia = 0.05
 
 # Quadcopter motion
-quadcopterOrientation = [0.0,0.0,0.0]	# [yaw,pitch,roll]
-quadcopterTorque = [0.0,0.0,0.0]
+quadcopterTorque = [0.0,0.0,0.0]	# [yaw,pitch,roll]
+quadcopterAngularAcceleration = [0.0,0.0,0.0]
+quadcopterAngularVelocity = [0.0,0.0,0.0]
+quadcopterOrientation = [0.0,0.0,-1.0]
 
 # Motor characteristics
 motorControllerValue = [0.0,0.0,0.0,0.0]	# [M0,M1,M2,M3]
 motorForce = [0.0,0.0,0.0,0.0]
+
+# Control variables, e.g. PID values etc.
+defaultMotorControllerValue = 40
+PIDConstants = [1.0,0.0,0.0]
+PIDTerms = [0.0,0.0,0.0]
 
 #*****************************************************************************#		
 # Define functions
@@ -46,8 +62,8 @@ motorForce = [0.0,0.0,0.0,0.0]
 def calculateQuadcopterTorque(motorForce,quadcopterTorque):
 	# Convert forces into torques
 	quadcopterTorque[0] = 0 # God knows what this ought to be :S...
-	quadcopterTorque[1] = motorForce[0]*quadcopterArmLength - motorForce[1]*quadcopterArmLength
-	quadcopterTorque[2] = motorForce[2]*quadcopterArmLength - motorForce[3]*quadcopterArmLength
+	quadcopterTorque[1] = motorForce[2]*quadcopterArmLength - motorForce[3]*quadcopterArmLength
+	quadcopterTorque[2] = motorForce[0]*quadcopterArmLength - motorForce[1]*quadcopterArmLength
 	
 	return
 
@@ -61,21 +77,23 @@ def calculateMotorForce(motorValue,motorForce):
 		else:
 			motorForce[i] = (motorValue[i] - 33)*0.065
 	return
-	
-def calculateMotion():
-	pass
-	return
-
-# Simulates sending a command to the ESC
-def sendMotorCommand():
-	pass
-	return
 
 # Simulates receiving a reading from the sensor
 def getSensorReading(quadcopterOrientation,sensorOrientation):
 	for i in range(len(quadcopterOrientation)):
 		# TODO: Add sensor noise!
 		sensorOrientation[i] = quadcopterOrientation[i]
+	return
+
+# Simulates sending a command to the ESC
+def sendMotorCommand(sensorOrientation,motorValue,PIDConstants,PIDTerms,timeSincePreviousMotorCommand):
+	#PID calculation!
+	PIDTerms[0] = PIDConstants[0]*(0-sensorOrientation[2])
+	PIDTerms[1] += PIDConstants[1]*(0-sensorOrientation[2])*timeSincePreviousMotorCommand
+	PIDTerms[2] = PIDConstants[2]*((0-sensorOrientation[2])-previousSensorOrientation[2])/timeSincePreviousMotorCommand
+	
+	motorValue[0] = 45 + PIDTerms[0] + PIDTerms[1] + PIDTerms[2]
+	motorValue[1] = 45 - (PIDTerms[0] + PIDTerms[1] + PIDTerms[2])
 	return
 
 #*****************************************************************************#
@@ -89,21 +107,42 @@ while time < simulationLength:
 	# Calculate forces produced by motors
 	calculateMotorForce(motorControllerValue,motorForce)
 	
+	# Calculate non-angular forces on quadcopter
+	# calculateQuadcopterForces()
+	
+	# Integrate to produce resultant position and velocity
+	# calculateMotion()
+	
+	# Perform velocity Verlet integration of torque to get angular velocity and
+	# position
+	
+	quadcopterOrientation[2] += interval*(quadcopterAngularVelocity[2] + 0.5*quadcopterAngularAcceleration[2]*interval)
+	if(quadcopterOrientation[2] > math.pi):
+		quadcopterOrientation[2] -= math.pi
+	if(quadcopterOrientation[2] < -math.pi):
+		quadcopterOrientation[2] += math.pi
+	quadcopterAngularVelocity[2] += 0.5*quadcopterAngularAcceleration[2]*interval
+	
 	# Calculate torque on quadcopter
 	calculateQuadcopterTorque(motorForce,quadcopterTorque)
 	
-	# Integrate to produce resultant motion
-	calculateOrientation(quadcopterTorque)
+	quadcopterAngularAcceleration[0] = 0.0 # TODO: work out what this is!
+	quadcopterAngularAcceleration[1] = 0.0 # TODO: work out what this is!
+	quadcopterAngularAcceleration[2] = quadcopterTorque[2]/quadcopterMomentOfInertia
 	
+	quadcopterAngularVelocity[2] += 0.5*quadcopterAngularAcceleration[2]*interval
 
 	# Sensor readings are received at well defined intervals
 	if ((time - lastSensorReading) >= sensorUpdatePeriod):
-		getSensorReading()
+		getSensorReading(quadcopterOrientation,sensorOrientation)
+		lastSensorReading = time
+		print(repr(time)[:6],sensorOrientation)
 	
 	# Motor commands sent out ~1ms after the sensor makes a reading times,
 	# however the torque produced by the motor may vary in a less quantised
-	# manner.
+	# manner. TODO: Implement torque variation as a function of time
 	if ((time - lastSensorReading) >= 0.001):
-		sendMotorCommand()
+		sendMotorCommand(sensorOrientation,motorControllerValue,PIDConstants,PIDTerms,(time-lastSensorReading))
+		
 
 

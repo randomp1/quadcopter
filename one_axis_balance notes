@@ -1,0 +1,19 @@
+Notes
+
+DMP is digital motion processing - what the sensor does to convert raw data into something more useful
+(e.g. integrate angular velocity from from gyroscopes into angles)
+unint8_t is an unsigned 8 bit integer
+FIFO buffer - first in/first out buffer stored on Arduino
+
+What does F do here:
+Serial.println(F("\nSend any character to begin DMP programming and demo: "));
+
+Read up on mpuIntStatus
+
+The sensor contains its own interrupt status and its own FIFO buffer. The Arduino has to copy these across; the sensor's interrupt routine
+only sets a flag on the Arduino.
+
+Note some dmp functions actually sent programs to the sensor to activate its own DMP routine
+Others do not involve the sensor at all, but process data that's already been through the sensor's DMP further
+
+There is a possiblity that more than one data packet could be sent per interrupt

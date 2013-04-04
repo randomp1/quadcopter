@@ -97,7 +97,7 @@ VectorInt16 aaReal;		// [x, y, z]			gravity-free accel sensor measurements
 VectorInt16 aaWorld;	// [x, y, z]			world-frame accel sensor measurements
 VectorFloat gravity;	// [x, y, z]			gravity vector
 float euler[3];			// [psi, theta, phi]	Euler angle container
-float ypr[3];			// [yaw, pitch, roll]	yaw/pitch/roll container
+float ypr[3];			// [yaw, pitch, roll]	yaw/pitch/roll container and gravity vector
 
 //PID loop variables
 const float desired_angles[2]={0.0,0.0};	//desired angles when balanced
@@ -178,7 +178,7 @@ void setup()
 	pinMode(psuPin,OUTPUT);
 	digitalWrite(psuPin,HIGH);
 	
-	pinMode(2,INPUT);//set up pin to which interrupt from sensor is attached
+	pinMode(2,INPUT);
 	
 	Serial.println("Motor controller ready :)");
 
@@ -242,7 +242,7 @@ void loop()
 	// if programming failed, don't try to do anything
 	if (!dmpReady) return;
 
-	// wait for MPU interrupt or extra packet(s) available (apparently sometimes more than one are sent per interrupt)
+	// wait for MPU interrupt or extra packet(s) available
 	while (!mpuInterrupt && fifoCount < packetSize)
 	{
 		//Check if stuff is available on the serial input buffer
@@ -367,7 +367,7 @@ int parse_input(String input_string)
 		psuState = 1;
 		digitalWrite(psuPin,LOW);
 		delay(5000);
-		previous_time = micros()/100;//initialise time at which PID loop starts
+		previous_time = micros()/100;
 	}
 	//Turn off power supply
 	else if(input_string == "PSU_off" || input_string == "off")
@@ -444,10 +444,10 @@ void updateMotor(float *motor_value_float, const float *desired_angles, float co
 	if(motor_value_float[1] < min_signal) motor_value_float[1] = min_signal;
 	if(motor_value_float[1] > max_signal) motor_value_float[1] = max_signal;
 	
-	/*if(motor_value_float[2] < min_signal) motor_value_float[2] = min_signal;
+	if(motor_value_float[2] < min_signal) motor_value_float[2] = min_signal;
 	if(motor_value_float[2] < max_signal) motor_value_float[2] += change[0]/2;
 	if(motor_value_float[3] < min_signal) motor_value_float[3] = min_signal;
-	if(motor_value_float[3] < max_signal) motor_value_float[3] -= change[0]/2;*/
+	if(motor_value_float[3] < max_signal) motor_value_float[3] -= change[0]/2;
 	
 }
 

@@ -157,7 +157,7 @@ class plot
 			//Plot data:
 			for(int i=0; i<(dataToPlot.length-1); i++)
 			{
-				//Check if graph scale allows data to be plotted (should only not be the case if manual scale is used)
+				//Check if graph scale allows data point to be plotted (should only not be the case if manual scale is used)
 				if( ((dataToPlot[i].getVarX() > xScaleMax) || (dataToPlot[i].getVarX() < xScaleMin) || (dataToPlot[i].getVarY() > yScaleMax) || (dataToPlot[i].getVarY() < yScaleMin))
 				 || ((dataToPlot[i+1].getVarX() > xScaleMax) || (dataToPlot[i+1].getVarX() < xScaleMin) || (dataToPlot[i+1].getVarY() > yScaleMax) || (dataToPlot[i+1].getVarY() < yScaleMin)) )
 				{
@@ -203,6 +203,8 @@ dataPacket newDataPacket;
 LinkedBlockingDeque<pair> rollCoordList;
 LinkedBlockingDeque<pair> MV1CoordList;
 LinkedBlockingDeque<pair> MV2CoordList;
+long previousTime = 0;
+long latestTime = 0;
 
 //Keyboard input stuff
 String keyBuffer = "";
@@ -331,6 +333,7 @@ void draw()
 	background(255,255,255);
 	
 	text("Framerate: " + frameRate,10,15);
+	if(previousTime != latestTime) text("Data frequency: " + (1000.0/(latestTime-previousTime)),10,25);
 	
 	height = frame.getHeight()-30;
 	width = frame.getWidth()-10;
@@ -412,6 +415,9 @@ void serialEvent(Serial port)
 					tempMV2 = (tempMV2 | packet[34]) << 8;
 					tempMV2 = (tempMV2 | packet[35]) << 8;
 					tempMV2 = (tempMV2 | packet[36]);
+					
+					previousTime = latestTime;
+					latestTime = tempInt;
 					
 					//Create new dataPacket to store results in a nice format
 					newDataPacket = new dataPacket(tempInt,Float.intBitsToFloat(tempYaw),Float.intBitsToFloat(tempPitch),Float.intBitsToFloat(tempRoll),0,0,0,Float.intBitsToFloat(tempMV1),Float.intBitsToFloat(tempMV2),0,0);

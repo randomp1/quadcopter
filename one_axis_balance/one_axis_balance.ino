@@ -120,7 +120,7 @@ int psuPin = 6;		//PSU pin
 int psuState = 0;	//PSU on or off
 
 //Motor control data
-const int motor_pin[4] = {11,10,9,8};			//Pin assignment
+const int motor_pin[4] = {10,11,9,8};			//Pin assignment
 Servo motor[4];									//Servo objects for motor
 const int min_signal = 40;						//Minimum signal required to turn on motor
 const int max_signal = 50;						//Maximum allowed signal (for safety!)
@@ -237,11 +237,17 @@ void setup()
 // ===					MAIN PROGRAM LOOP					 	===
 // ================================================================
 
+uint32_t time2, time1 = 0;
+
 void loop()
 {
 	// if programming failed, don't try to do anything
 	if (!dmpReady) return;
-
+	
+	time2 = micros()-time1;
+	//Serial.println(time2);
+	
+	
 	// wait for MPU interrupt or extra packet(s) available
 	while (!mpuInterrupt && fifoCount < packetSize)
 	{
@@ -276,6 +282,8 @@ void loop()
 			}
 		}
 	}
+	
+	time1 = micros();
 
 	// reset interrupt flag and get INT_STATUS byte
 	mpuInterrupt = false;
@@ -304,7 +312,6 @@ void loop()
 		
 		// read a packet from FIFO
 		mpu.getFIFOBytes(fifoBuffer, packetSize);
-		
 		
 		// track FIFO count here in case there is > 1 packet available
 		// (this lets us immediately read more without waiting for an interrupt)
@@ -339,11 +346,13 @@ void loop()
 		outputPacket[4] = (0x000000FF & timer1);
 		
 		for(int i=0; i<3; i++) floatToByteArray(ypr[i],(outputPacket+5+(4*i)));	//Yaw, pitch and roll
-		//P, I and D go here!
+		for(int i=0; i<3; i++) floatToByteArray(pidConstants[i],(outputPacket+17+(4*i))); //P,I and D
 		for(int i=0; i<4; i++) floatToByteArray(motor_value_float[i],(outputPacket+29+(4*i))); //Motor 1-4
 		
 		//Send packet over serial port
-		Serial.write(outputPacket,47);
+		
+		Serial.write(outputPacket,47); //Takes ~420us
+		
 /*		
 		//Write ESC values to serial port
 		Serial.print("T.E.:\t");

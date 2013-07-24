@@ -58,6 +58,13 @@ class dataPacket
 		System.arraycopy(yawPitchRoll,0,ypr,0,3);
 	}
 	
+	void setPID(float newP,float newI,float newD)
+	{
+		pid[0] = newP;
+		pid[1] = newI;
+		pid[2] = newD;
+	}
+	
 	//Getter methods
 	long getTime() { return time; }
 	float getYaw() { return ypr[0]; }
@@ -83,6 +90,9 @@ class dataPacket
 			return (float) 0.0;
 		}
 	}
+	float getP() { return pid[0]; }
+	float getI() { return pid[1]; }
+	float getD() { return pid[2]; }
 	void getMotorValues(float [] motorValues)
 	{
 		if(motorValues.length < 4)

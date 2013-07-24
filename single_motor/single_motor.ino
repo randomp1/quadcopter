@@ -65,7 +65,7 @@ void loop()
 		}
 	}
 	
-	if(psuState == 1) motor[1].write(motor_value_float[1]);
+	if(psuState == 1) motor[0].write(motor_value_float[0]);
 }
 
 int parse_input(String input_string)
@@ -105,7 +105,7 @@ int parse_input(String input_string)
 		if(foundPoint == 1) tempCoefficient /= pow(10,input_string.length()-3-pointPos);
 		
 		//Update motor speed
-		motor_value_float[1] = tempCoefficient;
+		motor_value_float[0] = tempCoefficient;
 	}
 	else return 1;
 	

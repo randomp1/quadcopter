@@ -31,7 +31,7 @@ THE SOFTWARE.
 
 //Packet format:
 //
-//	| char '>' | uint32_t time | float (32-bit) roll | float (32-bit) motor1 | float (32-bit) motor2 |
+//	| char '>' | uint32_t time | float (32-bit) yaw | float (32-bit) pitch | float (32-bit) roll | float (32-bit) motor1 | float (32-bit) motor2 |
 //
 
 import processing.serial.*;
@@ -157,7 +157,7 @@ class plot
 			//Plot data:
 			for(int i=0; i<(dataToPlot.length-1); i++)
 			{
-				//Check if graph scale allows data to be plotted (should only not be the case if manual scale is used)
+				//Check if graph scale allows data point to be plotted (should only not be the case if manual scale is used)
 				if( ((dataToPlot[i].getVarX() > xScaleMax) || (dataToPlot[i].getVarX() < xScaleMin) || (dataToPlot[i].getVarY() > yScaleMax) || (dataToPlot[i].getVarY() < yScaleMin))
 				 || ((dataToPlot[i+1].getVarX() > xScaleMax) || (dataToPlot[i+1].getVarX() < xScaleMin) || (dataToPlot[i+1].getVarY() > yScaleMax) || (dataToPlot[i+1].getVarY() < yScaleMin)) )
 				{
@@ -203,6 +203,11 @@ dataPacket newDataPacket;
 LinkedBlockingDeque<pair> rollCoordList;
 LinkedBlockingDeque<pair> MV1CoordList;
 LinkedBlockingDeque<pair> MV2CoordList;
+LinkedBlockingDeque<pair> PCoordList;
+LinkedBlockingDeque<pair> ICoordList;
+LinkedBlockingDeque<pair> DCoordList;
+long previousTime = 0;
+long latestTime = 0;
 
 //Keyboard input stuff
 String keyBuffer = "";
@@ -231,6 +236,11 @@ void setup()
 	
 	rollPlot = new plot(2000,1.0,0.5,0,0.5,11,11,-0.5,0.5);
 	rollPlot.setDataToPlot(rollCoordList.toArray(new pair[rollCoordList.size()]));
+	
+	//Set up PID deques
+	PCoordList = new LinkedBlockingDeque<pair>();
+	ICoordList = new LinkedBlockingDeque<pair>();
+	DCoordList = new LinkedBlockingDeque<pair>();
 	
 	//Set up motor 1 plot
 	MV1CoordList = new LinkedBlockingDeque<pair>();
@@ -331,6 +341,10 @@ void draw()
 	background(255,255,255);
 	
 	text("Framerate: " + frameRate,10,15);
+	if(previousTime != latestTime) text("Data frequency: " + (1000.0/(latestTime-previousTime)),10,25);
+	text("P: " + (PCoordList.peekLast()).getVarY(),200,15);
+	text("I: " + (ICoordList.peekLast()).getVarY(),400,15);
+	text("D: " + (DCoordList.peekLast()).getVarY(),600,15);
 	
 	height = frame.getHeight()-30;
 	width = frame.getWidth()-10;
@@ -399,6 +413,27 @@ void serialEvent(Serial port)
 					tempRoll = (tempRoll | packet[15]) << 8;
 					tempRoll = (tempRoll | packet[16]);
 					
+					//Get P coefficient from packet
+					int tempP = 0;
+					tempP = (tempP | packet[17]) << 8;
+					tempP = (tempP | packet[18]) << 8;
+					tempP = (tempP | packet[19]) << 8;
+					tempP = (tempP | packet[20]);
+					
+					//Get I coefficient from packet
+					int tempI = 0;
+					tempI = (tempI | packet[21]) << 8;
+					tempI = (tempI | packet[22]) << 8;
+					tempI = (tempI | packet[23]) << 8;
+					tempI = (tempI | packet[24]);
+					
+					//Get D coefficient from packet
+					int tempD = 0;
+					tempD = (tempD | packet[25]) << 8;
+					tempD = (tempD | packet[26]) << 8;
+					tempD = (tempD | packet[27]) << 8;
+					tempD = (tempD | packet[28]);
+					
 					//Get MV1 from data packet
 					int tempMV1 = 0;
 					tempMV1 = (tempMV1 | packet[29]) << 8;
@@ -413,14 +448,36 @@ void serialEvent(Serial port)
 					tempMV2 = (tempMV2 | packet[35]) << 8;
 					tempMV2 = (tempMV2 | packet[36]);
 					
+					previousTime = latestTime;
+					latestTime = tempInt;
+					
 					//Create new dataPacket to store results in a nice format
-					newDataPacket = new dataPacket(tempInt,Float.intBitsToFloat(tempYaw),Float.intBitsToFloat(tempPitch),Float.intBitsToFloat(tempRoll),0,0,0,Float.intBitsToFloat(tempMV1),Float.intBitsToFloat(tempMV2),0,0);
+					newDataPacket = new dataPacket(tempInt,
+												   Float.intBitsToFloat(tempYaw),
+												   Float.intBitsToFloat(tempPitch),
+												   Float.intBitsToFloat(tempRoll),
+												   Float.intBitsToFloat(tempP),
+												   Float.intBitsToFloat(tempI),
+												   Float.intBitsToFloat(tempD),
+												   Float.intBitsToFloat(tempMV1),
+												   Float.intBitsToFloat(tempMV2),
+												   0,
+												   0);
 					
 					//Using new data update graph coordinate lists
 					rollCoordList.push(new pair((double)newDataPacket.getTime(),(double)newDataPacket.getRoll()));
 					if(rollCoordList.size() > rollPlot.getNumDataPoints()) rollCoordList.removeLast();
 					
 					rollPlot.setDataToPlot(rollCoordList.toArray(new pair[rollCoordList.size()]));
+					
+					PCoordList.push(new pair((double)newDataPacket.getTime(),(double)newDataPacket.getP()));
+					if(PCoordList.size() > 1) PCoordList.removeLast();
+					
+					ICoordList.push(new pair((double)newDataPacket.getTime(),(double)newDataPacket.getI()));
+					if(ICoordList.size() > 1) ICoordList.removeLast();
+					
+					DCoordList.push(new pair((double)newDataPacket.getTime(),(double)newDataPacket.getD()));
+					if(DCoordList.size() > 1) DCoordList.removeLast();
 					
 					MV1CoordList.push(new pair((double)newDataPacket.getTime(),(double)newDataPacket.getMotorValues(0)));
 					if(MV1CoordList.size() > MV1Plot.getNumDataPoints()) MV1CoordList.removeLast();

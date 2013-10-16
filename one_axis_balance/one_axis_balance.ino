@@ -55,6 +55,124 @@ THE SOFTWARE.
 //#include "MPU6050_6Axis_MotionApps20.h"
 //#include "MPU6050.h" // not necessary if using MotionApps include file
 
+template<class T>
+class fifo
+{
+	T* fifoArray;
+	T* front; //Points to element at front of queue
+	T* back; //Points to element at back of queue
+	int numItems;
+	int maxItems;
+	
+	public:
+	fifo(int maxNumItems) //Constructor allocates a block of memory to be used for the duration of the object's life, no fancy stuff here!
+	{
+		if(maxNumItems <= 0) return;
+		maxItems = maxNumItems;
+		fifoArray = (T*) malloc((size_t) sizeof(T)*maxItems);
+		numItems = 0;
+		front = fifoArray;
+		back = front;
+	}
+	
+	fifo()
+	{
+		fifoArray = NULL;
+		front = NULL;
+		back = NULL;
+		maxItems = 0;
+		numItems = 0;
+	}
+	
+	~fifo() //Deallocate the memory we allocated
+	{
+		free(fifoArray);
+	}
+	
+	void set_size(unsigned int maxNumItems)
+	{
+		if(maxNumItems == 0) return;
+		maxItems = maxNumItems;
+		free(fifoArray);
+		fifoArray = (T*) malloc((size_t) sizeof(T)*maxItems);
+		numItems = 0;
+		front = fifoArray;
+		back = front;
+	}
+	
+	void push_back(const T& item)
+	{
+		//Decide if and where to place item
+		if(numItems == maxItems) return;
+		else if(numItems != 0)
+		{
+			if(back != fifoArray) back--;
+			else back = fifoArray+maxItems-1;
+		}
+		
+		*back = item;
+		numItems++;
+	}
+	
+	void pop_back()
+	{
+		//Decide if we can remove an item
+		if(numItems == 0) return;
+		else if(numItems > 1)
+		{
+			if(back != fifoArray+maxItems-1) back++;
+			else back = fifoArray;
+		}
+		
+		numItems--;
+	}
+	
+	void push_front(const T& item)
+	{
+		//Decide if and where to place item
+		if(numItems == maxItems) return;
+		else if(numItems != 0)
+		{
+			if(front != (fifoArray+maxItems-1))	front++;
+			else front = fifoArray;
+		}
+		
+		*front = item;
+		numItems++;
+	}
+	
+	void pop_front()
+	{
+		//Decide if we can remove an item
+		if(numItems == 0) return;
+		else if(numItems > 1)
+		{
+			if(front != fifoArray) front--;
+			else front = fifoArray+maxItems-1;
+		}
+		
+		numItems--;
+	}
+	
+	T& operator[](int element)
+	{
+		if((element < numItems) && (element >= 0))
+		{
+			if(element + (back-fifoArray) >= maxItems)
+			{
+				element -= (maxItems-(back-fifoArray));
+			}
+			else element += back-fifoArray;
+		}
+		else return fifoArray[element+maxItems]; //TODO: find a better way of doing this!
+		
+		return fifoArray[element];
+	}
+	
+	size_t size() { return numItems; }
+	size_t max_size() { return maxItems; }
+};
+
 // class default I2C address is 0x68
 // specific I2C addresses may be passed as a parameter here
 // AD0 low = 0x68 (default for SparkFun breakout and InvenSense evaluation board)
@@ -108,6 +226,10 @@ float pidConstants[3] = {0.05,1e-6,700};
 float pidValues[3] = {0,0,0};
 float defaultSpeed = 45;
 
+const int numDataPoints = 20;
+fifo<uint32_t> previousTimes;
+fifo<float>* previousAngles;
+
 //Output packet
 //Format:				   { '$', time,    yaw,     pitch,   roll,    p-term,  i-term,  d-term,  motor1,  motor2,  motor3,  motor4,  '\r', '\n' }
 uint8_t outputPacket[47] = { '$', 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, '\r', '\n' };
@@ -116,14 +238,14 @@ uint8_t outputPacket[47] = { '$', 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0
 String incoming_string;
 
 //PSU control data
-int psuPin = 6;		//PSU pin
-int psuState = 0;	//PSU on or off
+const int psuPin = 6;	//PSU pin
+int psuState = 0;		//PSU on or off
 
 //Motor control data
 const int motor_pin[4] = {10,11,9,8};			//Pin assignment
 Servo motor[4];									//Servo objects for motor
 const int min_signal = 40;						//Minimum signal required to turn on motor
-const int max_signal = 50;						//Maximum allowed signal (for safety!)
+const int max_signal = 55;						//Maximum allowed signal (for safety!)
 float motor_value_float[4] = {0.0,0.0,0.0,0.0};	//Array of motor values
 
 //Function to raise an integer to a power (Be careful! Has serious limitations)
@@ -133,7 +255,7 @@ int powint(int number,int exponent);
 int parse_input(String input_string);
 
 //Function to implement PID loop
-void updateMotor(float *motor_value_float, float desired_angles[2], float current_angles[3],float *previous_error,float *integral,int& previous_time, float *pidConstants);
+void updateMotors(const float *pidConstants,float *motor_value_float,const float* desired_angles,fifo<uint32_t>& timeArray,fifo<float>* angleArray,float *integral);
 
 //Function to store a float (32-bit floating point) in a four byte array
 void floatToByteArray(float &floatToConvert, uint8_t *byteArray);
@@ -168,6 +290,11 @@ void setup()
 	
 	// configure LED for output
 	pinMode(LED_PIN, OUTPUT);
+	
+	//Set up FIFO buffers for data
+	previousTimes.set_size(numDataPoints);
+	previousAngles = (fifo<float>*) malloc(3*sizeof(fifo<float>));
+	for(int i=0; i<3; i++) { previousAngles[i].set_size(numDataPoints);	}
 	
 	//Set motor pins as output and initialise the servo communications. Set the motors to be off!
 	for(int i=0; i < 4; i++) pinMode(motor_pin[i],OUTPUT);
@@ -333,11 +460,22 @@ void loop()
 		Serial.print("\t");
 		Serial.println(ypr[2]*2/M_PI,4);*/
 		
-		if(psuState == 0) for(int i=0; i<4; i++) motor_value_float[i] = 0.0;
-		else updateMotor(motor_value_float,desired_angles,ypr,previous_error,integral,previous_time,pidConstants);
+		//Add our new data to the queues
+		if(previousTimes.size() == previousTimes.max_size()) previousTimes.pop_back();
+		previousTimes.push_front(micros()/100); //TODO: Sort out overflow issue!
+		
+		for(int i=0; i<3; i++)
+		{
+			if(previousAngles[i].size() == previousAngles[i].max_size()) previousAngles[i].pop_back();
+			previousAngles[i].push_front(ypr[i]);
+		}
+		
+		//Set motor throttle settings in arduino memory (ESC not told at this stage)
+		if(psuState == 0) for(int i=0; i<4; i++) motor_value_float[i] = 0.0; //Zero if PSU is off
+		else updateMotors(pidConstants,motor_value_float,desired_angles,previousTimes,previousAngles,integral); //PID loop otherwise
 		
 		//Send signal to ESC to change motor speed
-		if(psuState == 1) for(int i=0; i < 2; i++) if(motor_value_float[i] < max_signal) motor[i].write(motor_value_float[i]);
+		for(int i=0; i < 2; i++) if(motor_value_float[i] < max_signal) motor[i].write(motor_value_float[i]);
 
 		//Prepare output packet
 		outputPacket[1] = (0xFF000000 & timer1) >> 24;			//Time
@@ -375,7 +513,7 @@ int parse_input(String input_string)
 	{
 		psuState = 1;
 		digitalWrite(psuPin,LOW);
-		delay(5000);
+		delay(3000);
 		previous_time = micros()/100;
 	}
 	//Turn off power supply
@@ -411,6 +549,36 @@ int parse_input(String input_string)
 		else if(input_string.substring(0,1) == "i") pidConstants[1] = tempCoefficient;
 		else if(input_string.substring(0,1) == "d") pidConstants[2] = tempCoefficient;
 	}
+	//Set defaultSpeed
+	else if(input_string.substring(0,1) == "t")
+	{
+		float tempCoefficient = 0;
+		int pointPos = 0;
+		int foundPoint = 0;
+	
+		//Parse each integer, storing in tempCoefficient
+		for(int i=0; i<(input_string.length()-2); i++)
+		{
+			if((input_string.charAt(2+i) <= '9') && (input_string.charAt(2+i) >= '0')) tempCoefficient = 10*tempCoefficient + (input_string.charAt(2+i)-48);
+			else if(input_string.charAt(2+i) == '.')
+			{
+				pointPos = i;
+				foundPoint = 1;
+			}
+			else return 1;
+		}
+		
+		//If decimal point present, divide by relevant power of ten
+		if(foundPoint == 1) tempCoefficient /= pow(10,input_string.length()-3-pointPos);
+		
+		defaultSpeed = tempCoefficient;
+	}
+	//Reset PID integral values
+	else if(input_string == "reset" || input_string == "r")
+	{
+		integral[0] = 0;
+		integral[1] = 0;
+	}
 	else return 1;
 	
 	return 0;
@@ -427,36 +595,35 @@ int powint(int number,int exponent)
 	return result;
 }
 
-void updateMotor(float *motor_value_float, const float *desired_angles, float const *current_angles,float *previous_error,float *integral,int& previous_time, float *pidConstants)
+void updateMotors(const float *pidConstants,float *motor_value_float,const float* desired_angles,fifo<uint32_t>& timeArray,fifo<float>* angleArray,float *integral)
 {
 	float error[2]; //create array to hold error
 	float change[2]; //create array to hold amount of change needed
 	float derivative[2];
-	int current_time = micros()/100;
-	int time_elapsed = current_time - previous_time; // calculate time since last calculation
-	previous_time = current_time;
+	uint32_t time_elapsed = timeArray[timeArray.size()-1] - timeArray[timeArray.size()-2]; // calculate time since last calculation
 
-	for(int i = 0; i<2; i++)
+	for(int i=0; i<2; i++)
 	{
-		error[i] = desired_angles[i] - current_angles[i+1]; //calculate current error
+		error[i] = desired_angles[i] - angleArray[i][angleArray[i].size()-1]; //calculate current error
 		integral[i] += error[i]*time_elapsed; //update value of integral
-		derivative[i] = (error[i] - previous_error[i])/time_elapsed;
+		derivative[i] = (angleArray[i][angleArray[i].size()-1] - angleArray[i][angleArray[i].size()-2])/time_elapsed;
 		change[i] = pidConstants[0]*error[i] + pidConstants[1]*integral[i] + pidConstants[2]*derivative[i];
-		previous_error[i] = error[i]; //update value of error
 	}
 
-	motor_value_float[0] = defaultSpeed + change[1];
-	motor_value_float[1] = defaultSpeed - change[1];
-	
+	motor_value_float[0] = defaultSpeed + change[0];
+	motor_value_float[1] = defaultSpeed - change[0];
+	motor_value_float[2] = defaultSpeed;
+	motor_value_float[3] = defaultSpeed;
+
 	if(motor_value_float[0] < min_signal) motor_value_float[0] = min_signal;
 	if(motor_value_float[0] > max_signal) motor_value_float[0] = max_signal;
 	if(motor_value_float[1] < min_signal) motor_value_float[1] = min_signal;
 	if(motor_value_float[1] > max_signal) motor_value_float[1] = max_signal;
 	
-	if(motor_value_float[2] < min_signal) motor_value_float[2] = min_signal;
-	if(motor_value_float[2] < max_signal) motor_value_float[2] += change[0]/2;
-	if(motor_value_float[3] < min_signal) motor_value_float[3] = min_signal;
-	if(motor_value_float[3] < max_signal) motor_value_float[3] -= change[0]/2;
+	//if(motor_value_float[2] < min_signal) motor_value_float[2] = min_signal;
+	//if(motor_value_float[2] < max_signal) motor_value_float[2] += change[0]/2;
+	//if(motor_value_float[3] < min_signal) motor_value_float[3] = min_signal;
+	//if(motor_value_float[3] < max_signal) motor_value_float[3] -= change[0]/2;
 	
 }
 
@@ -469,4 +636,58 @@ void floatToByteArray(float &floatToConvert, uint8_t *byteArray)
 	byteArray[2] = *(c+1);
 	byteArray[1] = *(c+2);
 	byteArray[0] = *(c+3);
+}
+
+//Fits parabola of form y=ax^2+bx+c to data
+void fitParabola(float *xVals,float *yVals,int numVals,float &a,float &b,float &c)
+{
+	//Scale our input values such that -1 < y < 1 and -1 < x < 1
+	float xMax = xVals[0];
+	float xMin = xVals[0];
+	float yMax = yVals[0];
+	float yMin = yVals[0];
+	
+	for(int i=0; i< numVals; i++)
+	{
+		if(xVals[i] < xMin) xMin = xVals[i];
+		if(xVals[i] > xMax) xMax = xVals[i];
+		
+		if(yVals[i] < yMin) yMin = yVals[i];
+		if(yVals[i] > yMax) yMax = yVals[i];
+	}
+	
+	float xTrans = (xMax+xMin)/2.0;
+	float yTrans = (yMax+yMin)/2.0;
+	float xScale = (xMax-xMin)/2.0;
+	float yScale = (yMax-yMin)/2.0;
+	
+	//Calculate different sums: x4 = sum(x[i]^4) for example
+	float x4 = 0;
+	float x3 = 0;
+	float x2 = 0;
+	float x = 0;
+	float y = 0;
+	float xy = 0;
+	float x2y = 0;
+	
+	for(int i=0; i<numVals; i++)
+	{
+		x4 += pow((xVals[i]-xTrans)/xScale,4);
+		x3 += pow((xVals[i]-xTrans)/xScale,3);
+		x2 += pow((xVals[i]-xTrans)/xScale,2);
+		x += (xVals[i]-xTrans)/xScale;
+		y += (yVals[i]-yTrans)/yScale;
+		xy += (xVals[i]-xTrans)/xScale*(yVals[i]-yTrans)/yScale;
+		x2y += pow((xVals[i]-xTrans)/xScale,2)*(yVals[i]-yTrans)/yScale;
+	}
+	
+	//Calculate the scaled coefficients
+	float aScaled = ((x*y/numVals-xy)*(x3-x*x2/numVals)-(x2-pow(x,2)/numVals)*(x2*y/numVals-x2y))/((x4-pow(x2,2)/numVals)*(x2-pow(x,2)/numVals)-(x3-x*x2/numVals)*(x3-x*x2/numVals));
+	float bScaled = -(aScaled*(x3-x*x2/numVals)+x*y/numVals-xy)/(x2-pow(x,2)/numVals);
+	float cScaled = -(aScaled*x2+bScaled*x-y)/numVals;
+	
+	//Calculate the original coefficients
+	a = yScale*aScaled/pow(xScale,2);
+	b = (yScale*bScaled-2*a*xTrans*xScale)/xScale;
+	c = yTrans + yScale*cScaled - a*pow(xTrans,2) - b*xTrans;
 }

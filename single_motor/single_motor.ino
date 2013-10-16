@@ -65,7 +65,7 @@ void loop()
 		}
 	}
 	
-	if(psuState == 1) motor[0].write(motor_value_float[0]);
+	if(psuState == 1) motor[1].write(motor_value_float[0]);
 }
 
 int parse_input(String input_string)

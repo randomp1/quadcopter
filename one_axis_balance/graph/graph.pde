@@ -337,18 +337,21 @@ void draw()
 		interval = millis();
 	}
 	
-	// black background
+	// White background
 	background(255,255,255);
-	
+
 	text("Framerate: " + frameRate,10,15);
-	if(previousTime != latestTime) text("Data frequency: " + (1000.0/(latestTime-previousTime)),10,25);
-	text("P: " + (PCoordList.peekLast()).getVarY(),200,15);
-	text("I: " + (ICoordList.peekLast()).getVarY(),400,15);
-	text("D: " + (DCoordList.peekLast()).getVarY(),600,15);
+	if(previousTime != latestTime)
+	{
+		text("Data frequency: " + (1000.0/(latestTime-previousTime)),10,25);
+		text("P: " + (PCoordList.peekLast()).getVarY(),200,15);
+		text("I: " + (ICoordList.peekLast()).getVarY(),400,15);
+		text("D: " + (DCoordList.peekLast()).getVarY(),600,15);
+	}
 	
 	height = frame.getHeight()-30;
 	width = frame.getWidth()-10;
-	
+
 	rollPlot.drawGraph();
 	MV1Plot.drawGraph();
 	MV2Plot.drawGraph();

@@ -226,7 +226,7 @@ float pidConstants[3] = {0.05,1e-6,700};
 float pidValues[3] = {0,0,0};
 float defaultSpeed = 45;
 
-const int numDataPoints = 20;
+const int numDataPoints = 3;
 fifo<uint32_t> previousTimes;
 fifo<float>* previousAngles;
 
@@ -257,6 +257,9 @@ int parse_input(String input_string);
 //Function to implement PID loop
 void updateMotors(const float *pidConstants,float *motor_value_float,const float* desired_angles,fifo<uint32_t>& timeArray,fifo<float>* angleArray,float *integral);
 
+//Fits parabola of form y=ax^2+bx+c to data
+void fitParabola(fifo<uint32_t> &xVals,fifo<float> &yVals,float &a,float &b,float &c);
+
 //Function to store a float (32-bit floating point) in a four byte array
 void floatToByteArray(float &floatToConvert, uint8_t *byteArray);
 
@@ -281,7 +284,7 @@ void setup()
 	// really up to you depending on your project)
 	Serial.begin(115200);
 	//while (!Serial); // wait for Leonardo enumeration, others continue immediately
-
+	
 	// NOTE: 8MHz or slower host processors, like the Teensy @ 3.3v or Ardunio
 	// Pro Mini running at 3.3v, cannot handle this baud rate reliably due to
 	// the baud timing being too misaligned with processor ticks. You must use
@@ -294,7 +297,11 @@ void setup()
 	//Set up FIFO buffers for data
 	previousTimes.set_size(numDataPoints);
 	previousAngles = (fifo<float>*) malloc(3*sizeof(fifo<float>));
-	for(int i=0; i<3; i++) { previousAngles[i].set_size(numDataPoints);	}
+	for(int i=0; i<3; i++)
+	{
+		previousAngles[i] = fifo<float>();	
+		previousAngles[i].set_size(numDataPoints);
+	}
 	
 	//Set motor pins as output and initialise the servo communications. Set the motors to be off!
 	for(int i=0; i < 4; i++) pinMode(motor_pin[i],OUTPUT);
@@ -461,12 +468,12 @@ void loop()
 		Serial.println(ypr[2]*2/M_PI,4);*/
 		
 		//Add our new data to the queues
-		if(previousTimes.size() == previousTimes.max_size()) previousTimes.pop_back();
+		while(previousTimes.size() >= previousTimes.max_size()) previousTimes.pop_back();
 		previousTimes.push_front(micros()/100); //TODO: Sort out overflow issue!
 		
 		for(int i=0; i<3; i++)
 		{
-			if(previousAngles[i].size() == previousAngles[i].max_size()) previousAngles[i].pop_back();
+			while(previousAngles[i].size() >= previousAngles[i].max_size()) previousAngles[i].pop_back();
 			previousAngles[i].push_front(ypr[i]);
 		}
 		
@@ -601,12 +608,16 @@ void updateMotors(const float *pidConstants,float *motor_value_float,const float
 	float change[2]; //create array to hold amount of change needed
 	float derivative[2];
 	uint32_t time_elapsed = timeArray[timeArray.size()-1] - timeArray[timeArray.size()-2]; // calculate time since last calculation
-
+	
+	float a = 0;
+	float b = 0;
+	float c = 0;
+	//fitParabola(timeArray,angleArray[0],a,b,c);
 	for(int i=0; i<2; i++)
 	{
-		error[i] = desired_angles[i] - angleArray[i][angleArray[i].size()-1]; //calculate current error
+		error[i] = desired_angles[i] - angleArray[2][angleArray[2].size()-1]; //calculate current error
 		integral[i] += error[i]*time_elapsed; //update value of integral
-		derivative[i] = (angleArray[i][angleArray[i].size()-1] - angleArray[i][angleArray[i].size()-2])/time_elapsed;
+		derivative[i] = (angleArray[2][angleArray[2].size()-1] - angleArray[2][angleArray[2].size()-2])/time_elapsed;
 		change[i] = pidConstants[0]*error[i] + pidConstants[1]*integral[i] + pidConstants[2]*derivative[i];
 	}
 
@@ -639,8 +650,19 @@ void floatToByteArray(float &floatToConvert, uint8_t *byteArray)
 }
 
 //Fits parabola of form y=ax^2+bx+c to data
-void fitParabola(float *xVals,float *yVals,int numVals,float &a,float &b,float &c)
+void fitParabola(fifo<uint32_t> &xVals,fifo<float> &yVals,float &a,float &b,float &c)
 {
+	//Check arrays have same length
+	if(xVals.size() != yVals.size())
+	{
+		a = 0;
+		b = 0;
+		c = 0;
+		return;
+	}
+	
+	int numVals = xVals.size();
+	
 	//Scale our input values such that -1 < y < 1 and -1 < x < 1
 	float xMax = xVals[0];
 	float xMin = xVals[0];

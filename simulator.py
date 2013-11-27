@@ -5,6 +5,7 @@
 #*****************************************************************************#
 import math
 from copy import deepcopy
+from matplotlib import pyplot as plt
 
 #*****************************************************************************#
 # Classes
@@ -27,7 +28,7 @@ from copy import deepcopy
 outputFile = open('output','w')
 
 # Overall simulation timings
-time = 0.0				# Units of seconds
+time = [0.0]				# Units of seconds
 interval = 0.0001
 simulationLength = 50.0
 currentProgress = -1.0
@@ -46,21 +47,23 @@ quadcopterMomentOfInertia = [0.05,0.05,1]	# Corresponds to leading diagonal of i
 quadcopterTorque = [0.0,0.0,0.0]	# [about +x, about +y, about +z]
 quadcopterAngularAcceleration = [0.0,0.0,0.0]
 quadcopterAngularVelocity = [0.0,0.0,0.0]
-quadcopterOrientation = [0.0,0.0,-1.0]	# [yaw,pitch,roll]
+quadcopterOrientation = [[0.0,0.0,-1.0]]	# [yaw,pitch,roll]
 
 # Sensor characteristics
-sensorReadings = [deepcopy(quadcopterOrientation)]
+sensorReadings = [deepcopy(quadcopterOrientation[-1])]
 sensorReadingTimes = [0.0]
-sensorUpdatePeriod = 0.15#.2
+sensorUpdatePeriod = 0.01#.2
 motorCommandSent = 1
 
 # Motor characteristics
 motorControllerValue = [0.0,0.0,0.0,0.0]	# [M0,M1,M2,M3]
 motorForce = [0.0,0.0,0.0,0.0]
+maxMotorAcceleration = 1.1
 
 # Control variables, e.g. PID values etc.
-defaultMotorControllerValue = 40
-PIDConstants = [20.0,0.0,8.0]
+maxDifference = 5
+defaultMotorControllerValue = (60.0+33.0)/2
+PIDConstants = [20.0,0.0,10.0]
 PIDTerms = [0.0,0.0,0.0]
 profileStartTime = -1.0
 
@@ -78,20 +81,43 @@ def calculateQuadcopterTorque(motorForce,quadcopterTorque):
 	return
 
 # Calculates Forces produced by motors based on ESC values
-def calculateMotorForce(motorValue,motorForce):
+def calculateMotorForce(timeList,motorValue,motorForce):
+	desiredForce = 0
 	for i in range(len(motorForce)):
 		if motorValue[i] <= 33:
-			motorForce[i] = 0
+			desiredForce = 0.0
 		elif motorValue[i] >= 60:
-			motorForce[i] = 1.76
+			desiredForce = 1.76
 		else:
-			motorForce[i] = (motorValue[i] - 33)*0.065
+			desiredForce = (motorValue[i] - 33.0)*0.065
+		
+		if (desiredForce-motorForce[i])/(timeList[-1]-timeList[-2]) > maxMotorAcceleration:
+			motorForce[i] = motorForce[i] + maxMotorAcceleration*(timeList[-1]-timeList[-2])
+		elif (desiredForce-motorForce[i])/(timeList[-1]-timeList[-2]) < -maxMotorAcceleration:
+			motorForce[i] = motorForce[i] - maxMotorAcceleration*(timeList[-1]-timeList[-2])
+		else:
+			motorForce[i] = desiredForce
+			
+		
 	return
 
 # Simulates receiving a reading from the sensor
 def getSensorReading(quadcopterOrientation):
 	# TODO: Add sensor noise!
 	return quadcopterOrientation
+
+def verletStep(value,derivative,secondDerivative,calculateSecondDerivative,stepSize):
+	nextValue = value + stepSize*(derivative + 0.5*secondDerivative*stepSize)
+	nextDerivative = derivative + 0.5*secondDerivative*stepSize
+	
+	# Calculate torque on quadcopter
+#	calculateSecondDerivative(motorForce,quadcopterTorque)
+	
+#	quadcopterAngularAcceleration[0] = quadcopterTorque[0]/quadcopterMomentOfInertia[0]
+#	quadcopterAngularAcceleration[1] = quadcopterTorque[1]/quadcopterMomentOfInertia[1]
+#	quadcopterAngularAcceleration[2] = quadcopterTorque[2]/quadcopterMomentOfInertia[2]
+	
+#	quadcopterAngularVelocity[0] += 0.5*quadcopterAngularAcceleration[0]*interval
 
 # Generic PID controller
 def incrementPID(error,previousError,PIDConstants,PIDTerms,timeElapsed):
@@ -105,29 +131,31 @@ def incrementPID(error,previousError,PIDConstants,PIDTerms,timeElapsed):
 
 # Simulates sending a command to the ESC - uncomment required version
 # Runs PID loop directly on angle error
-'''
 def calculateMotorCommand(sensorReadings,sensorReadingTimes,PIDConstants,PIDTerms):
 	#PID calculation!
 	PIDOutput = incrementPID(0.0-sensorReadings[-1][2],0.0-sensorReadings[-2][2],PIDConstants,PIDTerms,sensorReadingTimes[-1]-sensorReadingTimes[-2])
 	
-	return [45+PIDOutput,45-PIDOutput,0.0,0.0]
-'''	
+	if(2*PIDOutput > maxDifference):
+		PIDOutput = maxDifference/2
+	return [defaultMotorControllerValue+PIDOutput,defaultMotorControllerValue-PIDOutput,0.0,0.0]
+
+'''
 # Defines velocity profile, PID loop is run on error in velocity
 def calculateMotorCommand(sensorReadings,sensorReadingTimes,PIDConstants,PIDTerms):
-	if(profileStartTime < 0) profileStartTime = sensorReadingTimes[-1]
+	if(profileStartTime < 0): profileStartTime = sensorReadingTimes[-1]
 	
 	return [0.0,0.0,0.0,0.0]
-
+'''
 #*****************************************************************************#
 # Main loop
 #*****************************************************************************#
-while time < simulationLength:
+while time[-1] < simulationLength:
 	
 	# increment time
-	time += interval
+	time.append(time[-1]+interval)
 	
 	# Calculate forces produced by motors
-	calculateMotorForce(motorControllerValue,motorForce)
+	calculateMotorForce(time,motorControllerValue,motorForce)
 	
 	# Calculate non-angular forces on quadcopter
 	# calculateQuadcopterForces()
@@ -137,11 +165,14 @@ while time < simulationLength:
 	
 	# Perform velocity Verlet integration of torque to get angular velocity and
 	# position
-	quadcopterOrientation[2] += interval*(quadcopterAngularVelocity[0] + 0.5*quadcopterAngularAcceleration[0]*interval)
-	if(quadcopterOrientation[2] > math.pi):
-		quadcopterOrientation[2] -= 2*math.pi
-	if(quadcopterOrientation[2] < -math.pi):
-		quadcopterOrientation[2] += 2*math.pi
+	newOrientation = [0,0,0]
+	newOrientation[2] = quadcopterOrientation[-1][2] + interval*(quadcopterAngularVelocity[0] + 0.5*quadcopterAngularAcceleration[0]*interval)
+	if(newOrientation[2] > math.pi):
+		newOrientation[2] -= 2*math.pi
+	if(newOrientation[2] < -math.pi):
+		newOrientation[2] += 2*math.pi
+	quadcopterOrientation.append(newOrientation)
+	
 	quadcopterAngularVelocity[0] += 0.5*quadcopterAngularAcceleration[0]*interval
 	
 	# Calculate torque on quadcopter
@@ -155,30 +186,32 @@ while time < simulationLength:
 	# End of torque integration
 
 	# Sensor readings are received at well defined intervals
-	if ((time - sensorReadingTimes[-1]) >= sensorUpdatePeriod):
-		sensorReadings.append(deepcopy(getSensorReading(quadcopterOrientation)))
-		sensorReadingTimes.append(time)
+	if ((time[-1] - sensorReadingTimes[-1]) >= sensorUpdatePeriod):
+		sensorReadings.append(deepcopy(getSensorReading(quadcopterOrientation[-1])))
+		sensorReadingTimes.append(time[-1])
 		motorCommandSent = 0
 		
 		# Write readings to file
-		outputString = repr(time)[:6] + ',' + repr(sensorReadings[-1][2]) + '\n'
+		outputString = repr(time[-1])[:6] + ',' + repr(sensorReadings[-1][2]) + '\n'
 		outputFile.write(outputString)
 	
 	# Motor commands sent out ~1ms after the sensor makes a reading,
 	# however the torque produced by the motor may vary in a less quantised
 	# manner. TODO: Implement torque variation as a function of time
-	if (((time - sensorReadingTimes[-1]) >= 0.001) and (motorCommandSent == 0)):
+	if (((time[-1] - sensorReadingTimes[-1]) >= 0.001) and (motorCommandSent == 0)):
 		motorControllerValue = calculateMotorCommand(sensorReadings,sensorReadingTimes,PIDConstants,PIDTerms)
 		motorCommandSent = 1
 		#print(time,PIDTerms[2])
 	
 	# Print current progress
-	currentProgress = math.floor(100*time/simulationLength)
+	currentProgress = math.floor(100*time[-1]/simulationLength)
 	if(currentProgress != previousProgress):
-		print(repr(currentProgress)[:4]+'%',"complete")
+		print(str(currentProgress)[:4]+"% complete")
 		previousProgress = currentProgress
 		
-	errorRMS += (quadcopterOrientation[2]-0.0)**2*interval
+	errorRMS += (quadcopterOrientation[-1][2]-0.0)**2*interval
 	
-print("RMS error is:",errorRMS**0.5)
+print("RMS error is:"+str(errorRMS**0.5))
 
+plt.plot([x for x in time],[x[2] for x in quadcopterOrientation])
+plt.show()

@@ -72,7 +72,6 @@ def fitParabola(xVals,yVals):
 
 # Handles command line input by forwarding it to arduino
 def consoleInput(serialPort,terminate):
-	print("Blah!")
 	while(terminate[0] == False):
 	#	command = raw_input('')
 	#	serialPort.write(command)
@@ -93,71 +92,72 @@ def consoleInput(serialPort,terminate):
 # Reads input from the arduino
 def arduinoInput(serialPort,data,terminate):
 	# Main loop reading and handling data
-	print("arduinoInput")
 	b = [0]*47
 	aligned = 0
 	misAligned = 0
 	fitData = []
 	bufferMax = 0
 	while(terminate[0] == False):#aligned < 1000):
-		serialPort.readinto(b)
-		#print(b)
-		if ((b[0] == '$') and (b[45] == '\r') and (b[46] == '\n')):
-			print("Packets aligned properly! :)")
-			aligned += 1
-		else:
-			print("Packets not properly aligned :(")
-			misAligned +=1
-			alignment(serialPort)
-			continue
-		dataPoint = []
-		#convert appropriate sections of b to a stirng
-		str_b = ''.join(str(e) for e in b[1:5])
-		dataPoint.append(struct.unpack('>I',str_b)[0])
-		str_b = ''.join(str(e) for e in b[5:9])
-		dataPoint.append(struct.unpack('>f',str_b)[0])
-		str_b = ''.join(str(e) for e in b[9:13])
-		dataPoint.append(struct.unpack('>f',str_b)[0])
-		str_b = ''.join(str(e) for e in b[13:17])
-		dataPoint.append(struct.unpack('>f',str_b)[0])
-		str_b = ''.join(str(e) for e in b[17:21])
-		dataPoint.append(struct.unpack('>f',str_b)[0])
-		str_b = ''.join(str(e) for e in b[21:25])
-		dataPoint.append(struct.unpack('>f',str_b)[0])
-		str_b = ''.join(str(e) for e in b[25:29])
-		dataPoint.append(struct.unpack('>f',str_b)[0])
-		str_b = ''.join(str(e) for e in b[29:33])
-		dataPoint.append(struct.unpack('>f',str_b)[0])
-		str_b = ''.join(str(e) for e in b[33:37])
-		dataPoint.append(struct.unpack('>f',str_b)[0])
-		str_b = ''.join(str(e) for e in b[37:41])
-		dataPoint.append(struct.unpack('>f',str_b)[0])
-		str_b = ''.join(str(e) for e in b[41:45])
-		dataPoint.append(struct.unpack('>f',str_b)[0])
-	
-		#print(dataPoint)
-		data.append(dataPoint)
+		if(serialPort.inWaiting() >= 47):
+			serialPort.readinto(b)
+			#print(b)
+			if ((b[0] == '$') and (b[45] == '\r') and (b[46] == '\n')):
+				#print("Packets aligned properly! :)")
+				aligned += 1
+			else:
+				print("Packets not properly aligned :(")
+				misAligned +=1
+				alignment(serialPort)
+				continue
+			dataPoint = []
+			#convert appropriate sections of b to a stirng
+			str_b = ''.join(str(e) for e in b[1:5])
+			dataPoint.append(struct.unpack('>I',str_b)[0])
+			str_b = ''.join(str(e) for e in b[5:9])
+			dataPoint.append(struct.unpack('>f',str_b)[0])
+			str_b = ''.join(str(e) for e in b[9:13])
+			dataPoint.append(struct.unpack('>f',str_b)[0])
+			str_b = ''.join(str(e) for e in b[13:17])
+			dataPoint.append(struct.unpack('>f',str_b)[0])
+			str_b = ''.join(str(e) for e in b[17:21])
+			dataPoint.append(struct.unpack('>f',str_b)[0])
+			str_b = ''.join(str(e) for e in b[21:25])
+			dataPoint.append(struct.unpack('>f',str_b)[0])
+			str_b = ''.join(str(e) for e in b[25:29])
+			dataPoint.append(struct.unpack('>f',str_b)[0])
+			str_b = ''.join(str(e) for e in b[29:33])
+			dataPoint.append(struct.unpack('>f',str_b)[0])
+			str_b = ''.join(str(e) for e in b[33:37])
+			dataPoint.append(struct.unpack('>f',str_b)[0])
+			str_b = ''.join(str(e) for e in b[37:41])
+			dataPoint.append(struct.unpack('>f',str_b)[0])
+			str_b = ''.join(str(e) for e in b[41:45])
+			dataPoint.append(struct.unpack('>f',str_b)[0])
+		
+			#print(data)
+			data.append(dataPoint)
 
-		fitData.append([dataPoint[0],dataPoint[3]])
-		if(len(fitData) == 21):
-			fitData.pop(0)
-			#result = polyfit([x[0] for x in fitData],[x[1] for x in fitData],2)
-			#result2 = fitParabola([x[0] for x in fitData],[x[1] for x in fitData])
-			#print("Old: " + str(result) + "\nNew: " + str(result2))
+			fitData.append([dataPoint[0],dataPoint[3]])
+			if(len(fitData) == 21):
+				fitData.pop(0)
+				#result = polyfit([x[0] for x in fitData],[x[1] for x in fitData],2)
+				#result2 = fitParabola([x[0] for x in fitData],[x[1] for x in fitData])
+				#print("Old: " + str(result) + "\nNew: " + str(result2))
 			
-		if(serialPort.inWaiting() > bufferMax): bufferMax = serialPort.inWaiting()
-		#print("Buffer: " + str(serialPort.inWaiting()) + " Bytes, highest: " + str(bufferMax) + " Bytes | " + str(misAligned) + "/" + str(aligned) + " misaligned")
+			if(serialPort.inWaiting() > bufferMax): bufferMax = serialPort.inWaiting()
+			#print("Buffer: " + str(serialPort.inWaiting()) + " Bytes, highest: " + str(bufferMax) + " Bytes | " + str(misAligned) + "/" + str(aligned) + " misaligned")
+		else:
+			time.sleep(0.001)
 	#print(" - arduinoInputThread returning")
 
 # Draws graphs based on input from arduino
 def drawGraphs(data,terminate):
-	print("drawGraphs")
 	# Set up graphing
 	fig,axes = subplots(1,2)
 	fig.set_size_inches(20,10)
 	#print(axes)
 	for i in axes: i.set_xlim(auto=True)
-	axes[0].set_ylim(0,0.5)
+	axes[0].set_ylim(-0.5,0.5)
 	axes[1].set_ylim(0,70)
 	
 	t,roll,mv1 = [],[],[]
@@ -184,6 +184,7 @@ def drawGraphs(data,terminate):
 		t = [x[0] for x in currentData ]
 		roll= [x[3] for x in currentData ]
 		mv1=[x[7] for x in currentData ]
+		
 	
 		plt[0].set_data(t,roll)							# update the xy data
 		plt[1].set_data(t,mv1)							# update the xy data
@@ -226,33 +227,63 @@ for i in enumerate(portList): print("Device " + str(i[0]+1) + ": " + "\nHardware
 print("Enter the number of the device you wish to connect to: ")
 portNum = int(raw_input('>'))
 
-#Open serial port
-newPort = serial.Serial(portList[portNum-1][0],115200)
-print("Opened " + newPort.portstr)
-
-#TODO: Check if arduino has sent initialisation character
-time.sleep(2)
-#TODO: exit program if arduino does not send initialisation character after a reasonable wait
-#Send character to tell arduino to start sending data
-#newPort.flushInput()
-#newPort.write('h')
+while(True):
+	#Open serial port
+	newPort = serial.Serial(portList[portNum-1][0],baudrate=115200)
+	print("\nOpened " + newPort.portstr)
+	
+	#Check Arduino is responding
+	print("Checking if Arduino has initialised properly")
+	time.sleep(3)
+	
+	b = [0]*newPort.inWaiting()
+	newPort.readinto(b)
+	if(''.join(b[-56:]) == 'Send any character to begin DMP programming and demo: \r\n'):
+		print("Arduino and sensor successfully initialised!")
+	else:
+		print("Error: Arduino didn't initialise properly, trying again.")
+		print("Closing " + newPort.portstr)
+		newPort.close()
+		continue
+	
+	print("\nInitialising DMP")
+	newPort.flushInput()
+	newPort.write('h')
+	time.sleep(3)
+	
+	b = [0]*167
+	newPort.readinto(b)
+	if(''.join(b[-22:]) == 'FIFO Packet size: 48\r\n'):
+		print("DMP successfully initialised!")
+		break
+	else:
+		print("Error: DMP didn't initialise properly, trying again.")
+		print("Closing " + newPort.portstr)
+		newPort.close()
+		continue
 
 data = []
 terminate = [[False],[False],[False]]
 try:
 	#newPort.write('on')
 	# Start threads
+	print("\nStarting serial port listener thread")
 	arduinoInputThread = threading.Thread(target=arduinoInput,args=(newPort,data,terminate[0]))
 	arduinoInputThread.daemon=True
 	arduinoInputThread.start()
+	print("Started!")
 	
+	print("\nStarting user input handling thread")
 	consoleInputThread = threading.Thread(target=consoleInput,args=(newPort,terminate[1]))
 	consoleInputThread.daemon=True
 	consoleInputThread.start()
+	print("Started!")
 	
+	print("\nStarting graph drawing thread")	
 	drawThread = threading.Thread(target=drawGraphs,args=(data,terminate[2]))
 	drawThread.daemon=True
 	drawThread.start()
+	print("Started!")
 	
 	while(True): time.sleep(10000)
 except KeyboardInterrupt:

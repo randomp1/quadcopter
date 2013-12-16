@@ -104,8 +104,13 @@ def arduinoInput(serialPort,data,terminate):
 			if ((b[0] == '$') and (b[45] == '\r') and (b[46] == '\n')):
 				#print("Packets aligned properly! :)")
 				aligned += 1
+			elif(''.join(b[0:14]) == 'FIFO overflow!'):
+				print("MPU FIFO overflow!")
+				misAligned +=1
+				alignment(serialPort)
+				continue
 			else:
-				print("Packets not properly aligned :(")
+				#print("Packets not properly aligned :(")
 				misAligned +=1
 				alignment(serialPort)
 				continue
@@ -136,10 +141,11 @@ def arduinoInput(serialPort,data,terminate):
 		
 			#print(data)
 			data.append(dataPoint)
+			#if(len(data) > 3 and data[-1][0] != data[-2][0]): print("Data frequency: " + str(10.0**3/(data[-1][0]-data[-2][0])))
 
-			fitData.append([dataPoint[0],dataPoint[3]])
-			if(len(fitData) == 21):
-				fitData.pop(0)
+			#fitData.append([dataPoint[0],dataPoint[3]])
+			#if(len(fitData) == 21):
+			#	fitData.pop(0)
 				#result = polyfit([x[0] for x in fitData],[x[1] for x in fitData],2)
 				#result2 = fitParabola([x[0] for x in fitData],[x[1] for x in fitData])
 				#print("Old: " + str(result) + "\nNew: " + str(result2))
@@ -154,11 +160,13 @@ def arduinoInput(serialPort,data,terminate):
 def drawGraphs(data,terminate):
 	# Set up graphing
 	fig,axes = subplots(1,2)
-	fig.set_size_inches(20,10)
+	fig.set_size_inches(15,10,forward=True)
 	#print(axes)
-	for i in axes: i.set_xlim(auto=True)
-	axes[0].set_ylim(-0.5,0.5)
-	axes[1].set_ylim(0,70)
+	for i in axes:
+		i.set_xlim(auto=True)
+		i.grid('on')
+	axes[0].set_ylim(-0.4,0.4)
+	axes[1].set_ylim(40.0,60.0)
 	
 	t,roll,mv1 = [],[],[]
 	fig.canvas.draw()
@@ -180,7 +188,7 @@ def drawGraphs(data,terminate):
 		#if(len(currentData) > 0):
 		#	if(currentData[-1] == data[-1]): continue		# Check if we have some new data
 		
-		currentData = data[-1000:]						# Take snapshot of data *before* reading it into arrays
+		currentData = data[-2000:]						# Take snapshot of data *before* reading it into arrays
 		t = [x[0] for x in currentData ]
 		roll= [x[3] for x in currentData ]
 		mv1=[x[7] for x in currentData ]
@@ -253,7 +261,7 @@ while(True):
 	
 	b = [0]*167
 	newPort.readinto(b)
-	if(''.join(b[-22:]) == 'FIFO Packet size: 48\r\n'):
+	if(''.join(b[-22:-3]) == 'FIFO Packet size: 4'):
 		print("DMP successfully initialised!")
 		break
 	else:

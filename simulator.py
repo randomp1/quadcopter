@@ -58,12 +58,12 @@ motorCommandSent = 1
 # Motor characteristics
 motorControllerValue = [0.0,0.0,0.0,0.0]	# [M0,M1,M2,M3]
 motorForce = [0.0,0.0,0.0,0.0]
-maxMotorAcceleration = 1.1
+maxMotorAcceleration = 0.305
 
 # Control variables, e.g. PID values etc.
 maxDifference = 5
 defaultMotorControllerValue = (60.0+33.0)/2
-PIDConstants = [20.0,0.0,10.0]
+PIDConstants = [5.0,0.0,1.0]
 PIDTerms = [0.0,0.0,0.0]
 profileStartTime = -1.0
 

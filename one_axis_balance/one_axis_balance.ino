@@ -48,8 +48,6 @@ THE SOFTWARE.
 #include "I2Cdev.h"
 
 #include <Servo.h>
-#include <LiquidCrystal.h>
-#include <stdlib.h>
 
 #include "MPU6050_9Axis_MotionApps41.h"
 //#include "MPU6050_6Axis_MotionApps20.h"
@@ -224,7 +222,7 @@ float integral[2] = {0.0,0.0};				//initialise integral
 int previous_time = 0;
 float pidConstants[3] = {0.05,1e-6,700};
 float pidValues[3] = {0,0,0};
-float defaultSpeed = 45;
+float defaultSpeed = 50;
 
 const int numDataPoints = 3;
 fifo<uint32_t> previousTimes;
@@ -242,10 +240,12 @@ const int psuPin = 6;	//PSU pin
 int psuState = 0;		//PSU on or off
 
 //Motor control data
+const int ESC_min_pulse = 1000;					//Minimum ESC pulse duration
+const int ESC_max_pulse = 2000;					//Maximum ESC pulse duration
 const int motor_pin[4] = {10,11,9,8};			//Pin assignment
 Servo motor[4];									//Servo objects for motor
 const int min_signal = 40;						//Minimum signal required to turn on motor
-const int max_signal = 55;						//Maximum allowed signal (for safety!)
+const int max_signal = 60;						//Maximum allowed signal (for safety!)
 float motor_value_float[4] = {0.0,0.0,0.0,0.0};	//Array of motor values
 
 //Function to raise an integer to a power (Be careful! Has serious limitations)
@@ -458,14 +458,6 @@ void loop()
 		mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);		//Takes ~750us
 //		mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
 //		mpu.dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &q);
-
-// display Euler angles in degrees
-/*		Serial.print("ypr\t");
-		Serial.print(ypr[0]/M_PI,4);
-		Serial.print("\t");
-		Serial.print(ypr[1]*2/M_PI,4);
-		Serial.print("\t");
-		Serial.println(ypr[2]*2/M_PI,4);*/
 		
 		//Add our new data to the queues
 		while(previousTimes.size() >= previousTimes.max_size()) previousTimes.pop_back();
@@ -482,7 +474,13 @@ void loop()
 		else updateMotors(pidConstants,motor_value_float,desired_angles,previousTimes,previousAngles,integral); //PID loop otherwise
 		
 		//Send signal to ESC to change motor speed
-		for(int i=0; i < 2; i++) if(motor_value_float[i] < max_signal) motor[i].write(motor_value_float[i]);
+		float pulseLength[4];
+		for(int i=0; i < 2; i++)
+		{
+			pulseLength[i] = ESC_min_pulse + (motor_value_float[i]/180.0)*(ESC_max_pulse-ESC_min_pulse);
+			if(pulseLength[i] > 1400) pulseLength[i] = 1000;
+		}
+		for(int i=0; i < 2; i++) if(motor_value_float[i] < max_signal) motor[i].writeMicroseconds(ESC_min_pulse + motor_value_float[i]*(ESC_max_pulse-ESC_min_pulse)/180.0);
 
 		//Prepare output packet
 		outputPacket[1] = (0xFF000000 & timer1) >> 24;			//Time
@@ -615,14 +613,14 @@ void updateMotors(const float *pidConstants,float *motor_value_float,const float
 	//fitParabola(timeArray,angleArray[0],a,b,c);
 	for(int i=0; i<2; i++)
 	{
-		error[i] = desired_angles[i] - angleArray[2][angleArray[2].size()-1]; //calculate current error
+		error[i] = angleArray[2][angleArray[2].size()-1] - desired_angles[i]; //calculate current error
 		integral[i] += error[i]*time_elapsed; //update value of integral
 		derivative[i] = (angleArray[2][angleArray[2].size()-1] - angleArray[2][angleArray[2].size()-2])/time_elapsed;
 		change[i] = pidConstants[0]*error[i] + pidConstants[1]*integral[i] + pidConstants[2]*derivative[i];
 	}
 
-	motor_value_float[0] = defaultSpeed + change[0];
-	motor_value_float[1] = defaultSpeed - change[0];
+	motor_value_float[0] = defaultSpeed - change[0];
+	motor_value_float[1] = defaultSpeed + change[0];
 	motor_value_float[2] = defaultSpeed;
 	motor_value_float[3] = defaultSpeed;
 

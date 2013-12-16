@@ -4,6 +4,8 @@
 const int inputPin = 3;
 bool interrupt_flag = 0;
 const int period =  1000000;
+float motor_baseline = 50.0;
+float motor_amplitude = 10.0;
 
 //Set up serial variables
 String incoming_string;
@@ -45,7 +47,7 @@ void setup()
 
 void loop()
 {
-        motor[0].write(50.0+10.0*sin(2.0*PI/period*float(micros())));
+        motor[0].write(motor_baseline+motor_amplitude*sin(2.0*PI/period*float(micros())));
 	if (interrupt_flag == 1)
 	{
 		//send time
